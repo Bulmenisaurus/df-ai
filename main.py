@@ -1,4 +1,4 @@
 import sklearn
+from sklearn import datasets
 
-print('Beep boop AI 🤖')
-# TODO: make the rest of the ai
+# get a list of moves
