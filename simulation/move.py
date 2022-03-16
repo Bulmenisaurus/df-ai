@@ -10,7 +10,5 @@ class Move:
     energyArriving: float
     arrivalTime: float
     id: int = -1
-    # TODO: assumed to be us for now
-    # sender: str
 
 
