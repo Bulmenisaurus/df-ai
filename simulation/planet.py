@@ -1,10 +1,37 @@
 from dataclasses import dataclass
 import math
 
+import numba
+
 from simulation.move import Move
 
 EMPTY_ADDRESS = "0x0000000000000000000000000000000000000000"
 
+
+class PlanetManager(dict):
+    def __init__(self, *args, **kwargs):
+        """
+        Class that manages lazy updating planets when they are fetched
+        """
+        super().__init__(*args, **kwargs)
+        self.time = 0
+
+    def __getitem__(self, item) -> 'Planet':
+        planet: 'Planet' = dict.__getitem__(self, item)
+        if planet.last_updated_at != self.time:
+            planet.update(self.time)
+            planet.last_updated_at = self.time
+
+        return planet
+
+
+@numba.jit()
+def _get_energy_at_time(energy_growth: float, time_elapsed: float, energy_cap: float, energy: float):
+    denominator = math.exp((-4 * energy_growth * time_elapsed) / energy_cap) * \
+                  (energy_cap / energy - 1) + \
+                  1
+
+    return energy_cap / denominator
 
 @dataclass
 class Planet:
@@ -19,6 +46,15 @@ class Planet:
     x: int
     y: int
     last_updated_at: int = -1
+    _hash: int = -1
+
+    # for caching
+
+    def __hash__(self):
+        if self._hash == -1:
+            self._hash = hash(self.locationId)
+        return self._hash
+
 
     # https://github.com/darkforest-eth/packages/blob/71f81ef7aaa05dfb03c3e2914c7b36736f5f84d3/gamelogic/src/planet.ts#L15-L23
     def get_range(self, sending_percent=100.0):
@@ -64,7 +100,7 @@ class Planet:
         if self.energyGrowth == 0 and self.energy > self.energyCap:
             self.energy = self.energyCap
 
-    def _get_energy_at_time(self, time: float):
+    def get_energy_at_time(self, time: float):
         if self.energy == 0:
             return 0
 
@@ -78,11 +114,7 @@ class Planet:
 
         time_elapsed = time - self.last_updated_at
 
-        denominator = math.exp((-4 * self.energyGrowth * time_elapsed) / self.energyCap) * \
-                      (self.energyCap / self.energy - 1) + \
-                      1
-
-        return self.energyCap / denominator
+        return _get_energy_at_time(self.energyGrowth, time_elapsed, self.energyCap, self.energy)
 
     def update(self, current_time: float):
-        self.energy = self._get_energy_at_time(current_time)
+        self.energy = self.get_energy_at_time(current_time)
